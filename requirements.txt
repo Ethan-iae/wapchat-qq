@@ -1,0 +1,8 @@
+Flask
+requests
+Werkzeug
+pymongo[srv]
+Pillow
+emoji
+Flask-Compress
+boto3
