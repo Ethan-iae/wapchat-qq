@@ -421,6 +421,73 @@ def load_banned_words():
 
 BANNED_WORDS = load_banned_words()
 
+LOGIN_WML = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml>
+<head><meta http-equiv="Cache-Control" content="max-age=0"/></head>
+<card id="login" title="登录"><p align="left"><b>WapChatQQ</b>{%if error%}<b>[{{error}}]</b>{%endif%}{%if success%}<b>[{{success}}]</b>{%endif%}<br/>账号:<input name="account" type="text" emptyok="false" format="*M"/><br/>密码:<input name="password" type="password" emptyok="false"/><br/><anchor>[登录]<go href="login" method="post"><postfield name="account" value="$(account)"/><postfield name="password" value="$(password)"/><postfield name="login_btn" value="1"/></go></anchor> <anchor>[注册]<go href="login" method="post"><postfield name="account" value="$(account)"/><postfield name="password" value="$(password)"/><postfield name="register_btn" value="1"/></go></anchor></p></card>
+</wml>
+"""
+
+NOKIA_WML = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml>
+    <head>
+        <meta http-equiv="Cache-Control" content="max-age=0"/>
+    </head>
+    
+    <card id="chat" title="WapChat QQ">
+        <onevent type="onenterforward">
+            <refresh>
+                <setvar name="message" value=""/>
+            </refresh>
+        </onevent>
+        <p>
+            <b>WapChatQQ({{ online_count }}在线)</b> <a href="#options">[选项]</a><br/>
+            --------<br/>
+            发言:<input name="message" type="text" emptyok="true" format="*M"/><br/>
+            <anchor>[发送]
+                <go href="./" method="post">
+                    <postfield name="message" value="$(message)"/>
+                </go>
+            </anchor>
+            <anchor>[刷新]
+                <go href="./" method="post">
+                    <postfield name="r" value="1"/>
+                </go>
+            </anchor><br/>
+            --------<br/>
+            {% if not history %}暂无消息<br/>{% endif %}
+            {% for msg in history %}
+                <b>{{ msg.get('sender_title', 'QQ群') }}</b><br/>
+                {{ msg.wml_text | safe }}<br/>
+            {% endfor %}
+        </p>
+    </card>
+
+    <card id="options" title="选项菜单">
+        <p>
+            <a href="#rename">改名</a><br/>
+            <a href="logout">注销</a><br/>
+            <a href="#chat">返回聊天</a>
+        </p>
+    </card>
+
+    <card id="rename" title="修改昵称">
+        <p>
+            当前昵称: {{ saved_username }}<br/>
+            新昵称:<input name="new_name" type="text" emptyok="false"/><br/>
+            <anchor>[确认保存]
+                <go href="rename_wml" method="post">
+                    <postfield name="new_name" value="$(new_name)"/>
+                </go>
+            </anchor><br/>
+            <a href="#options">返回选项</a>
+        </p>
+    </card>
+</wml>
+"""
+
 NOKIA_HTML = """<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//WAPFORUM//DTD XHTML Mobile 1.0//EN" "http://www.wapforum.org/DTD/xhtml-mobile10.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -2102,6 +2169,180 @@ def view_drive():
         total_pages=total_pages,
         q=q,
     )
+
+
+# ==========================================
+# WML 界面专属路由
+# ==========================================
+
+@app.route('/wml/login', methods=['GET', 'POST'])
+def wml_login_page():
+    if request.method == 'GET':
+        account = session.get('nokia_account')
+        if account and account in users_db and users_db[account].get('status') != 'pending':
+            return redirect(url_for('wml_index'))
+            
+        resp = make_response(render_template_string(LOGIN_WML))
+        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+        return resp
+    
+    account = request.form.get('account', '').strip()
+    password = request.form.get('password', '').strip()
+
+    if not account or not password:
+        resp = make_response(render_template_string(LOGIN_WML, error="账号和密码不能为空！"))
+        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+        return resp
+        
+    if not re.match(r'^[A-Za-z0-9_]{3,15}$', account):
+        resp = make_response(render_template_string(LOGIN_WML, error="账号仅限3-15位字母数字下划线！"))
+        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+        return resp
+    
+    if request.form.get('register_btn') == '1':
+        MAX_TOTAL_ACCOUNTS = 500
+        if len(users_db) >= MAX_TOTAL_ACCOUNTS:
+            resp = make_response(render_template_string(LOGIN_WML, error="服务器名额满，暂停注册！"))
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+            return resp
+
+        if account in users_db:
+            resp = make_response(render_template_string(LOGIN_WML, error="账号已存在，请直接登录！"))
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+            return resp
+        
+        client_ip = get_real_ip(request)
+        MAX_ACCOUNTS_PER_IP = 1  
+        ip_reg_count = sum(1 for user_info in users_db.values() if user_info.get('ip') == client_ip)
+        
+        if ip_reg_count >= MAX_ACCOUNTS_PER_IP:
+            resp = make_response(render_template_string(LOGIN_WML, error="您的IP已达到注册上限！"))
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+            return resp
+        
+        users_db[account] = {
+            "password": password, 
+            "nickname": account, 
+            "ip": client_ip,
+            "status": "pending" 
+        }
+        save_users()
+        
+        cloudflare_verify_url = f"http://verify.ekiz.top/?account={account}"
+        return redirect(cloudflare_verify_url)
+        
+    else:  # 登录
+        user_doc = users_collection.find_one({"_id": account})
+        if user_doc:
+            users_db[account] = {
+                "password": user_doc.get("password"),
+                "nickname": user_doc.get("nickname"),
+                "ip": user_doc.get("ip"),
+                "status": user_doc.get("status", "active")
+            }
+
+        if account not in users_db or users_db[account]['password'] != password:
+            resp = make_response(render_template_string(LOGIN_WML, error="账号或密码错误！"))
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+            return resp
+            
+        if users_db[account].get('status') == 'pending':
+            resp = make_response(render_template_string(LOGIN_WML, error="账号待审核，请联系群主！"))
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+            return resp
+            
+        session.permanent = True
+        session['nokia_account'] = account
+        return redirect(url_for('wml_index'))
+
+@app.route('/wml/logout', methods=['GET'])
+def wml_logout():
+    session.pop('nokia_account', None)
+    return redirect(url_for('wml_login_page'))
+
+@app.route('/wml/', methods=['GET', 'POST'])
+def wml_index():
+    global chat_history
+    account = session.get('nokia_account')
+    
+    if not account or account not in users_db:
+        return redirect(url_for('wml_login_page'))
+        
+    if users_db[account].get('status') == 'pending':
+        session.pop('nokia_account', None)
+        return redirect(url_for('wml_login_page'))
+
+    if request.method == 'POST':
+        msg_text = request.form.get('message', '').strip()
+        client_ip = get_real_ip(request)
+        
+        if msg_text and msg_text != ip_last_message.get(client_ip, ""):
+            ip_last_message[client_ip] = msg_text 
+            
+            filtered_msg = filter_emoji(msg_text)
+            username = users_db[account].get('nickname', account)
+            location = get_ip_location(client_ip, request)
+            
+            full_message = f"[{location} - {username}] {filtered_msg}"
+            
+            try:
+                requests.post('http://127.0.0.1:3000/send_group_msg', json={
+                    "group_id": TARGET_GROUP_ID,
+                    "message": full_message
+                }, timeout=3)
+            except Exception as e:
+                print(f"WML 发送失败: {e}")
+                
+        # WML 必须返回内容而不能 302 重定向
+        pass 
+
+    recent_history_raw = chat_history[-20:] if len(chat_history) >= 20 else chat_history
+    
+    # 构建 WML 专属格式的历史记录
+    wml_history = []
+    for m in recent_history_raw:
+        wml_msg = dict(m)
+        raw_text = m.get('text', '')
+        # 清除 a 标签的多余属性，仅保留 href
+        clean_text = re.sub(r'<a href=([\'"])([^\'"]+)\1[^>]*>(.*?)</a>', r'<a href="\2">\3</a>', raw_text)
+        # 移除跨度标签
+        clean_text = re.sub(r'</?span[^>]*>', '', clean_text)
+        wml_msg['wml_text'] = clean_text
+        wml_history.append(wml_msg)
+        
+    # 倒序显示（因为 WML 里是最新的在上面）
+    wml_history.reverse()
+
+    user_doc = users_collection.find_one({"_id": account})
+    if user_doc:
+        users_db[account]['nickname'] = user_doc.get('nickname', account)
+        users_db[account]['status'] = user_doc.get('status', 'active')
+
+    saved_username = users_db[account].get('nickname', account)
+    saved_username = filter_emoji(saved_username)
+    
+    online_sessions[account] = time.time()
+    current_online = get_online_count()
+    
+    raw_content = render_template_string(NOKIA_WML, history=wml_history, saved_username=saved_username, online_count=current_online)
+    resp = make_response(raw_content)
+    resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+    return resp
+
+@app.route('/wml/rename_wml', methods=['POST'])
+def wml_rename():
+    account = session.get('nokia_account')
+    if not account or account not in users_db:
+        return redirect(url_for('wml_login_page'))
+        
+    new_name = request.form.get('new_name', '').strip()
+    if new_name:
+        new_name = new_name[:15]
+        new_name = filter_emoji(new_name)
+        users_db[account]['nickname'] = new_name
+        save_users()
+        
+    return redirect(url_for('wml_index'))
 
 
 @app.route("/", methods=["GET"])
