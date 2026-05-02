@@ -1503,8 +1503,8 @@ def get_ip_location(ip, req):
             location = f"{pro}省{city}市" if city else f"{pro}省"
 
     if not location:
-        cf_country = req.headers.get("X-CF-Country")
-        cf_region = req.headers.get("X-CF-Region")
+        cf_country = req.headers.get("X-Real-Country")
+        cf_region = req.headers.get("X-Real-Region")
 
         if cf_country == "CN":
             location = f"中国-{cf_region}" if cf_region else "中国"
