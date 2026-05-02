@@ -2307,12 +2307,17 @@ def wml_login_page():
             
         session.permanent = True
         session['nokia_account'] = account
-        return redirect(url_for('wml_index'))
+        return redirect('/wml/')
 
 @app.route('/wml/logout', methods=['GET'])
 def wml_logout():
     session.pop('nokia_account', None)
-    return redirect(url_for('wml_login_page'))
+    return redirect('/wml/login')
+
+@app.route('/wml', methods=['GET', 'POST'])
+def wml_index_no_slash():
+    # 显式拦截 /wml，返回相对路径重定向，防止 Flask 默认的绝对路径重定向导致域名暴露为 koyeb 内部域名
+    return redirect('/wml/')
 
 @app.route('/wml/', methods=['GET', 'POST'])
 def wml_index():
@@ -2320,11 +2325,11 @@ def wml_index():
     account = session.get('nokia_account')
     
     if not account or account not in users_db:
-        return redirect(url_for('wml_login_page'))
+        return redirect('/wml/login')
         
     if users_db[account].get('status') == 'pending':
         session.pop('nokia_account', None)
-        return redirect(url_for('wml_login_page'))
+        return redirect('/wml/login')
 
     if request.method == 'POST':
         msg_text = request.form.get('message', '').strip()
@@ -2346,12 +2351,12 @@ def wml_index():
                 }, timeout=3)
                 # WML 原样执行到底部，但是如果是 PC 且是 POST 操作，为了防刷新建议 Redirect
                 if not is_mobile_device(request):
-                    return redirect(url_for('wml_index'))
+                    return redirect('/wml/')
             except Exception as e:
                 print(f"WML 发送失败: {e}")
                 
         if not is_mobile_device(request) and request.method == 'POST':
-            return redirect(url_for('wml_index'))
+            return redirect('/wml/')
 
     recent_history_raw = chat_history[-20:] if len(chat_history) >= 20 else chat_history
     
@@ -2396,7 +2401,7 @@ def wml_index():
 def wml_rename():
     account = session.get('nokia_account')
     if not account or account not in users_db:
-        return redirect(url_for('wml_login_page'))
+        return redirect('/wml/login')
         
     new_name = request.form.get('new_name', '').strip()
     if new_name:
@@ -2405,7 +2410,7 @@ def wml_rename():
         users_db[account]['nickname'] = new_name
         save_users()
         
-    return redirect(url_for('wml_index'))
+    return redirect('/wml/')
 
 
 @app.route("/", methods=["GET"])
