@@ -64,6 +64,7 @@ WapChatQQ/
 | `R2_SECRET_KEY` | **(必填)** Cloudflare R2 的 Secret Key。 |
 | `R2_BUCKET_NAME` | **(必填)** R2 存储桶的名称 (例如: `wapchat-drive`)。 |
 | `TARGET_GROUP_ID` | **(必填)** 需要互通的 QQ 群号 (纯数字，例如 `123456789`)。 |
+| `BOT_QQ` | **(必填)** 挂机做机器人的 QQ 小号 (纯数字，例如 `123456789`)。用于 NapCat 启动和消息过滤。 |
 | `ADMIN_SECRET_TOKEN` | **(必填)** 自定义一段复杂密码。用于你后续审批用户。 |
 | `WEBHOOK_TOKEN` | **(选填)** 用于后端验证，可随便填一段字母。 |
 

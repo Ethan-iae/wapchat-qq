@@ -2943,7 +2943,7 @@ def receive_qq_msg():
             qq_msg_id = data.get("message_id")
 
             HIDDEN_BOT_NAMES = ["WML Bot", "Bot"]
-            HIDDEN_BOT_QQS = ["3979065264", "3852667296"]
+            HIDDEN_BOT_QQS = [os.environ.get("BOT_QQ", "123456789")]
 
             if sender_name in HIDDEN_BOT_NAMES or str(sender_qq) in HIDDEN_BOT_QQS:
                 final_pure_sender = ""

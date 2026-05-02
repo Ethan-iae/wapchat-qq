@@ -12,7 +12,7 @@ RUN pip install -r requirements.txt
 # 3. 下载并直装 NapCatQQ
 RUN curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh \
     && bash napcat.sh \
-    --qq "3852667296" \
+    --qq "123456789" \
     --mode ws \
     --proxy 0 \
     --confirm
@@ -24,7 +24,7 @@ COPY all_output_result_kmj.txt .
 COPY sensitive_words.txt .
 
 # 5. 使用 sed 强制替换真实端口
-ENV BOT_QQ="3852667296"
+ENV BOT_QQ="123456789"
 
 RUN echo '#!/bin/bash' > start.sh \
     && echo 'export TERM=xterm-256color' >> start.sh \
