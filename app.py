@@ -2321,7 +2321,7 @@ def wml_index_no_slash():
 
 @app.route('/wml/', methods=['GET', 'POST'])
 def wml_index():
-    global chat_history
+    global chat_history, current_msg_id, recent_sent_messages
     account = session.get('nokia_account')
     
     if not account or account not in users_db:
@@ -2345,10 +2345,53 @@ def wml_index():
             full_message = f"[{location} - {username}] {filtered_msg}"
             
             try:
-                requests.post('http://127.0.0.1:3000/send_group_msg', json={
+                resp = requests.post('http://127.0.0.1:3000/send_group_msg', json={
                     "group_id": TARGET_GROUP_ID,
                     "message": full_message
-                }, timeout=3)
+                }, timeout=3).json()
+                
+                qq_msg_id = None
+                if resp and resp.get("status") in ["ok", "success"]:
+                    qq_msg_id = resp.get("data", {}).get("message_id")
+
+                current_msg_id += 1
+                
+                recent_sent_messages.append(re.sub(r"\s+", "", full_message))
+                if len(recent_sent_messages) > 50:
+                    recent_sent_messages.pop(0)
+
+                safe_user = html.escape(username)
+                safe_text = html.escape(filtered_msg).replace("\n", "<br/>")
+                
+                safe_text = re.sub(
+                    r"\[@([^\]]+)\]",
+                    r'<span class="action-reply">[@\1]</span>',
+                    safe_text,
+                )
+                safe_text = re.sub(
+                    r"(?<![\w.-])@([\w\u4e00-\u9fa5·_-]+)",
+                    r'<span class="action-reply">@\1</span>',
+                    safe_text,
+                )
+                
+                web_display_text = f"[网页-{location}]{safe_user}: {safe_text}"
+                current_time_str = datetime.datetime.now(TZ_UTC8).strftime("%H:%M:%S")
+
+                new_msg = {
+                    "id": current_msg_id,
+                    "qq_msg_id": qq_msg_id,
+                    "sender_title": f"消息 {current_time_str}",
+                    "text": web_display_text,
+                    "pure_sender": username,
+                    "pure_text": filtered_msg,
+                }
+
+                chat_history.append(new_msg)
+                save_chat_message(new_msg)
+
+                if len(chat_history) > 50:
+                    chat_history.pop(0)
+
                 # WML 原样执行到底部，但是如果是 PC 且是 POST 操作，为了防刷新建议 Redirect
                 if not is_mobile_device(request):
                     return redirect('/wml/')
