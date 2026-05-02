@@ -1,5 +1,7 @@
 # WapChat QQ (老手机 WAP 版 QQ 中转站)
 
+![Python](https://img.shields.io/badge/Python-Flask-3776AB?logo=python&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-Koyeb-2496ED?logo=docker&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)
+
 这是一个为诺基亚 (Nokia)、索爱 (Sony Ericsson) 等支持 WAP/XHTML Mobile 1.0 的老手机设计的 QQ 网页版中转服务端。
 
 通过部署本项目，你可以让老手机重新连上现代的 QQ 群，实现文字聊天、看图、发图、发表情，甚至群网盘文件的互通
@@ -98,3 +100,7 @@ WapChatQQ/
 * **可视化管理后台**：为你提供了一个后台界面，可直观查看申请者的留言、IP 地址、地理位置，并支持一键审批放行或拉黑清理。
 
 👉 **你可以进入其独立的 GitHub 仓库获取最新版本：[WapChat-Verify](https://github.com/Ethan-iae/WapChat-Verify)。**
+
+## 📄 许可证 (License)
+
+本项目基于 [MIT](LICENSE) 协议开源。
