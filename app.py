@@ -2172,53 +2172,111 @@ def view_drive():
 
 
 # ==========================================
-# WML 界面专属路由
+# WML 界面专属自适应与路由
 # ==========================================
+
+def is_mobile_device(req):
+    accept_header = req.headers.get('Accept', '').lower()
+    if 'text/vnd.wap.wml' in accept_header:
+        return True
+    if req.headers.get('X-Wap-Profile') or req.headers.get('Profile'):
+        return True
+    ua = req.headers.get('User-Agent', '').lower()
+    mobile_keywords = [
+        'nokia', 'symbian', 'ucweb', 'opera', 'wap',
+        'motorola', 'mot-', 'sonyericsson', 'samsung', 'lg',
+        'blackberry', 'j2me', 'midp', 'cldc', 'up.browser',
+        'netfront', 'obigo', 'teleca', 'openwave'
+    ]
+    return any(k in ua for k in mobile_keywords)
+
+def adapt_wml_to_xhtmlmp(wml_str, target_card=None):
+    if target_card:
+        wml_str = re.sub(r'href="#([^"]+)"', r'href="?card=\1"', wml_str)
+        match = re.search(f'<card id="{target_card}"[^>]*>.*?</card>', wml_str, flags=re.DOTALL)
+        if match:
+            wml_str = re.sub(r'<card.*?</card>', '', wml_str, flags=re.DOTALL)
+            wml_str = wml_str.replace('</wml>', f'{match.group(0)}\n</wml>')
+
+    html = re.sub(r'<\?xml.*?\?>', '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html PUBLIC "-//WAPFORUM//DTD XHTML Mobile 1.0//EN" "http://www.wapforum.org/DTD/xhtml-mobile10.dtd">', wml_str)
+    html = re.sub(r'<!DOCTYPE wml.*?>', '', html, flags=re.DOTALL)
+    html = html.replace('<wml>', '<html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>WapChat QQ</title></head><body>')
+    html = html.replace('</wml>', '</body></html>')
+    
+    def replace_card(m):
+        card_id = m.group(1)
+        title = m.group(2)
+        if card_id in ['login', 'chat', 'options', 'rename']:
+            return f'<div id="{card_id}">'
+        else:
+            return f'<div id="{card_id}"><h2>{title}</h2>'
+            
+    html = re.sub(r'<card id="([^"]+)" title="([^"]+)">', replace_card, html)
+    html = html.replace('</card>', '</div>')
+    html = html.replace('<h2>WapChat QQ</h2>', '')
+    html = re.sub(r'emptyok="[^"]+"', '', html)
+    html = re.sub(r'format="[^"]+"', '', html)
+    html = html.replace('<p align="left">', '<div>').replace('<p>', '<div>').replace('</p>', '</div>')
+
+    if 'id="login"' in html:
+        html = html.replace('账号:<input', '<form action="/wml/login" method="post">账号:<input')
+        html = re.sub(r'<anchor>\[登录\].*?name="login_btn".*?</anchor>', r'<input type="submit" name="login_btn" value="登录"/>', html, flags=re.DOTALL)
+        html = re.sub(r'<anchor>\[注册\].*?name="register_btn".*?</anchor>', r'<input type="submit" name="register_btn" value="注册"/></form>', html, flags=re.DOTALL)
+
+    if 'id="chat"' in html:
+        html = html.replace('发言:<input', '<form action="/wml/" method="post" style="display:inline;">发言:<input')
+        html = re.sub(r'<anchor>\[发送\].*?</anchor>', r'<input type="submit" value="发送"/></form>', html, flags=re.DOTALL)
+        html = re.sub(r'<anchor>\[刷新\].*?</anchor>', r'<form action="/wml/" method="post" style="display:inline; margin-left:4px;"><input type="hidden" name="r" value="1"/><input type="submit" value="刷新"/></form>', html, flags=re.DOTALL)
+    
+    if 'id="rename"' in html:
+        html = html.replace('新昵称:<input', '<form action="/wml/rename_wml" method="post" style="display:inline;">新昵称:<input')
+        html = re.sub(r'<anchor>\[确认保存\].*?</anchor>', r'<input type="submit" value="确认保存"/></form>', html, flags=re.DOTALL)
+
+    return html
 
 @app.route('/wml/login', methods=['GET', 'POST'])
 def wml_login_page():
+    def render_adaptive_login(error=None, success=None):
+        raw_content = render_template_string(LOGIN_WML, error=error, success=success)
+        if is_mobile_device(request):
+            resp = make_response(raw_content)
+            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+        else:
+            pc_content = adapt_wml_to_xhtmlmp(raw_content)
+            resp = make_response(pc_content)
+            resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return resp
+
     if request.method == 'GET':
         account = session.get('nokia_account')
         if account and account in users_db and users_db[account].get('status') != 'pending':
             return redirect(url_for('wml_index'))
             
-        resp = make_response(render_template_string(LOGIN_WML))
-        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-        return resp
+        return render_adaptive_login()
     
     account = request.form.get('account', '').strip()
     password = request.form.get('password', '').strip()
 
     if not account or not password:
-        resp = make_response(render_template_string(LOGIN_WML, error="账号和密码不能为空！"))
-        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-        return resp
+        return render_adaptive_login(error="账号和密码不能为空！")
         
     if not re.match(r'^[A-Za-z0-9_]{3,15}$', account):
-        resp = make_response(render_template_string(LOGIN_WML, error="账号仅限3-15位字母数字下划线！"))
-        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-        return resp
+        return render_adaptive_login(error="账号仅限3-15位字母数字下划线！")
     
     if request.form.get('register_btn') == '1':
         MAX_TOTAL_ACCOUNTS = 500
         if len(users_db) >= MAX_TOTAL_ACCOUNTS:
-            resp = make_response(render_template_string(LOGIN_WML, error="服务器名额满，暂停注册！"))
-            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-            return resp
+            return render_adaptive_login(error="服务器名额满，暂停注册！")
 
         if account in users_db:
-            resp = make_response(render_template_string(LOGIN_WML, error="账号已存在，请直接登录！"))
-            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-            return resp
+            return render_adaptive_login(error="账号已存在，请直接登录！")
         
         client_ip = get_real_ip(request)
         MAX_ACCOUNTS_PER_IP = 1  
         ip_reg_count = sum(1 for user_info in users_db.values() if user_info.get('ip') == client_ip)
         
         if ip_reg_count >= MAX_ACCOUNTS_PER_IP:
-            resp = make_response(render_template_string(LOGIN_WML, error="您的IP已达到注册上限！"))
-            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-            return resp
+            return render_adaptive_login(error="您的IP已达到注册上限！")
         
         users_db[account] = {
             "password": password, 
@@ -2242,14 +2300,10 @@ def wml_login_page():
             }
 
         if account not in users_db or users_db[account]['password'] != password:
-            resp = make_response(render_template_string(LOGIN_WML, error="账号或密码错误！"))
-            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-            return resp
+            return render_adaptive_login(error="账号或密码错误！")
             
         if users_db[account].get('status') == 'pending':
-            resp = make_response(render_template_string(LOGIN_WML, error="账号待审核，请联系群主！"))
-            resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
-            return resp
+            return render_adaptive_login(error="账号待审核，请联系群主！")
             
         session.permanent = True
         session['nokia_account'] = account
@@ -2290,11 +2344,14 @@ def wml_index():
                     "group_id": TARGET_GROUP_ID,
                     "message": full_message
                 }, timeout=3)
+                # WML 原样执行到底部，但是如果是 PC 且是 POST 操作，为了防刷新建议 Redirect
+                if not is_mobile_device(request):
+                    return redirect(url_for('wml_index'))
             except Exception as e:
                 print(f"WML 发送失败: {e}")
                 
-        # WML 必须返回内容而不能 302 重定向
-        pass 
+        if not is_mobile_device(request) and request.method == 'POST':
+            return redirect(url_for('wml_index'))
 
     recent_history_raw = chat_history[-20:] if len(chat_history) >= 20 else chat_history
     
@@ -2325,8 +2382,14 @@ def wml_index():
     current_online = get_online_count()
     
     raw_content = render_template_string(NOKIA_WML, history=wml_history, saved_username=saved_username, online_count=current_online)
-    resp = make_response(raw_content)
-    resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+    if is_mobile_device(request):
+        resp = make_response(raw_content)
+        resp.headers['Content-Type'] = 'text/vnd.wap.wml; charset=utf-8'
+    else:
+        target_card = request.args.get('card', 'chat')
+        pc_content = adapt_wml_to_xhtmlmp(raw_content, target_card)
+        resp = make_response(pc_content)
+        resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
 
 @app.route('/wml/rename_wml', methods=['POST'])
