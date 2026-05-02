@@ -589,7 +589,7 @@ NOKIA_HTML = """<?xml version="1.0" encoding="utf-8"?>
         }
         function replyMsg(id, name) {
             if (!id) return;
-            var val = input.value.replace(/^\[回复:\d+\]\s*/, '');
+            var val = input.value.replace(/^\\[回复:\\d+\\]\\s*/, '');
             if (name && val.indexOf('[@' + name + ']') === -1) {
                 val = '[@' + name + '] ' + val;
             }
@@ -687,7 +687,7 @@ NOKIA_HTML = """<?xml version="1.0" encoding="utf-8"?>
         function changeName() {
             var newName = prompt("请输入您的新昵称：\\n(此操作不会更改您的登录账号)", myUsername);
             if (newName !== null) {
-                newName = newName.replace(/^\s+|\s+$/g, '');
+                newName = newName.replace(/^\\s+|\\s+$/g, '');
                 if (newName !== '') {
                     var xhr = new XMLHttpRequest();
                     xhr.open('POST', '/api/change_name?t=' + new Date().getTime(), true);
